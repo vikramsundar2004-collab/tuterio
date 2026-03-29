@@ -279,16 +279,21 @@ function extractOutputText(data) {
   return "";
 }
 
-async function callOpenAI(model, problem, mode, imageDataUrl) {
+async function callOpenAI(model, problem, mode, imageDataUrl, originalImageDataUrl) {
   const instructions = mode === "help"
-    ? "You are a math tutor in Help Mode. Give hints, guiding questions, and one next-step check. Do not reveal final numeric answer unless user explicitly asks."
-    : "You are a math tutor in Solve Mode. Provide a numbered step-by-step solution and final answer. Keep math notation clean and concise.";
+    ? "You are a math tutor in Help Mode. First read/transcribe the problem from text/image. Then give hints, guiding questions, and one next-step check. Do not reveal final numeric answer unless user explicitly asks. If image is hard to read, state exactly what is unclear."
+    : "You are a math tutor in Solve Mode. First read/transcribe the problem from text/image. Then provide a numbered step-by-step solution and final answer. Keep math notation clean and concise. If image is hard to read, state exactly what is unclear.";
 
   const userContent = [];
   if (problem && problem.trim()) {
     userContent.push({ type: "input_text", text: `Problem text: ${problem.trim()}` });
   }
+  if (originalImageDataUrl) {
+    userContent.push({ type: "input_text", text: "Image A is the original upload." });
+    userContent.push({ type: "input_image", image_url: originalImageDataUrl, detail: "high" });
+  }
   if (imageDataUrl) {
+    userContent.push({ type: "input_text", text: "Image B is an upscaled enhancement. Use whichever is clearer." });
     userContent.push({ type: "input_image", image_url: imageDataUrl, detail: "high" });
   }
   if (!userContent.length) {
@@ -322,7 +327,7 @@ async function callOpenAI(model, problem, mode, imageDataUrl) {
   return message || "No model text returned.";
 }
 
-async function openAITutor(problem, mode, imageDataUrl) {
+async function openAITutor(problem, mode, imageDataUrl, originalImageDataUrl) {
   if (!OPENAI_API_KEY) {
     return {
       message: fallbackTutor(problem, mode, Boolean(imageDataUrl)),
@@ -332,12 +337,12 @@ async function openAITutor(problem, mode, imageDataUrl) {
   }
 
   try {
-    const message = await callOpenAI(OPENAI_MODEL, problem, mode, imageDataUrl);
+    const message = await callOpenAI(OPENAI_MODEL, problem, mode, imageDataUrl, originalImageDataUrl);
     return { message, model: OPENAI_MODEL, warning: null };
   } catch (primaryError) {
     if (OPENAI_MODEL !== FALLBACK_MODEL) {
       try {
-        const message = await callOpenAI(FALLBACK_MODEL, problem, mode, imageDataUrl);
+        const message = await callOpenAI(FALLBACK_MODEL, problem, mode, imageDataUrl, originalImageDataUrl);
         return {
           message,
           model: FALLBACK_MODEL,
@@ -371,6 +376,7 @@ async function handleTutor(req, res) {
     const imageDataInput = typeof payload.imageDataUrl === "string" ? payload.imageDataUrl : "";
 
     let processedDataUrl = "";
+    let originalDataUrl = "";
     let warning = null;
 
     if (imageDataInput) {
@@ -378,13 +384,14 @@ async function handleTutor(req, res) {
       if (!parsed) {
         return sendJson(res, 400, { error: "Unsupported image format. Use PNG, JPG, or WEBP." });
       }
+      originalDataUrl = imageDataInput;
 
       const upscaled = runPythonUpscale(parsed.buffer, extensionFromMime(parsed.mime));
       processedDataUrl = `data:image/jpeg;base64,${upscaled.buffer.toString("base64")}`;
       warning = upscaled.warning;
     }
 
-    const result = await openAITutor(problem, mode, processedDataUrl);
+    const result = await openAITutor(problem, mode, processedDataUrl, originalDataUrl);
     sendJson(res, 200, {
       message: result.warning ? `${result.message}\n\n[System note] ${result.warning}` : result.message,
       mode,

@@ -101,26 +101,74 @@ async function fileToDataUrl(file) {
   });
 }
 
+async function attachImageFile(file, sourceLabel) {
+  try {
+    imageDataUrl = await fileToDataUrl(file);
+    imagePreviewEl.src = imageDataUrl;
+    imagePreviewEl.classList.remove("hidden");
+    inputStatusEl.textContent = `${sourceLabel} attached. Python upscaling will run before solving.`;
+    return true;
+  } catch (error) {
+    inputStatusEl.textContent = error.message;
+    clearImage();
+    return false;
+  }
+}
+
 imageInputEl.addEventListener("change", async (event) => {
   const file = event.target.files?.[0];
   if (!file) {
     clearImage();
     return;
   }
-
-  try {
-    imageDataUrl = await fileToDataUrl(file);
-    imagePreviewEl.src = imageDataUrl;
-    imagePreviewEl.classList.remove("hidden");
-    updateInputStatus();
-  } catch (error) {
-    inputStatusEl.textContent = error.message;
-    clearImage();
-  }
+  await attachImageFile(file, "Photo");
 });
 
 clearImageBtn.addEventListener("click", clearImage);
 problemEl.addEventListener("input", updateInputStatus);
+
+problemEl.addEventListener("paste", async (event) => {
+  const items = event.clipboardData?.items;
+  if (!items) {
+    return;
+  }
+
+  const imageItem = Array.from(items).find((item) => item.type && item.type.startsWith("image/"));
+  if (!imageItem) {
+    return;
+  }
+
+  event.preventDefault();
+  const blob = imageItem.getAsFile();
+  if (!blob) {
+    inputStatusEl.textContent = "Could not read pasted image.";
+    return;
+  }
+  await attachImageFile(blob, "Pasted image");
+});
+
+window.addEventListener("paste", async (event) => {
+  if (document.activeElement === problemEl) {
+    return;
+  }
+
+  const items = event.clipboardData?.items;
+  if (!items) {
+    return;
+  }
+  const imageItem = Array.from(items).find((item) => item.type && item.type.startsWith("image/"));
+  if (!imageItem) {
+    return;
+  }
+
+  event.preventDefault();
+  const blob = imageItem.getAsFile();
+  if (!blob) {
+    inputStatusEl.textContent = "Could not read pasted image.";
+    return;
+  }
+  await attachImageFile(blob, "Pasted image");
+});
 
 async function askTutor(mode) {
   const problem = problemEl.value.trim();

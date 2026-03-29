@@ -153,6 +153,14 @@ function readBody(req) {
   });
 }
 
+function parseJson(raw) {
+  try {
+    return { ok: true, value: JSON.parse(raw || "{}") };
+  } catch {
+    return { ok: false, value: null };
+  }
+}
+
 function parseDataUrl(dataUrl) {
   if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:")) {
     return null;
@@ -352,7 +360,11 @@ async function handleTutor(req, res) {
 
   try {
     const raw = await readBody(req);
-    const payload = JSON.parse(raw || "{}");
+    const parsed = parseJson(raw);
+    if (!parsed.ok) {
+      return sendJson(res, 400, { error: "Invalid JSON body" });
+    }
+    const payload = parsed.value;
 
     const problem = typeof payload.problem === "string" ? payload.problem : "";
     const mode = payload.mode === "solve" ? "solve" : "help";
@@ -394,7 +406,11 @@ async function handleInterest(req, res) {
 
   try {
     const raw = await readBody(req);
-    const payload = JSON.parse(raw || "{}");
+    const parsed = parseJson(raw);
+    if (!parsed.ok) {
+      return sendJson(res, 400, { error: "Invalid JSON body" });
+    }
+    const payload = parsed.value;
     const email = typeof payload.email === "string" ? payload.email.trim() : "";
     const studentName = typeof payload.studentName === "string" ? payload.studentName.trim() : "";
 

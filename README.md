@@ -1,4 +1,4 @@
-# LumiMath MVP
+# tuterio MVP
 
 Production-ready MVP for math tutoring with GPT + photo input.
 
@@ -47,8 +47,8 @@ node scripts/smoke_test.js
 
 ## Deploy Fast (Docker)
 ```powershell
-docker build -t lumimath .
-docker run -p 3000:3000 -e OPENAI_API_KEY=your_key_here -e OPENAI_MODEL=gpt-5.4 lumimath
+docker build -t tuterio .
+docker run -p 3000:3000 -e OPENAI_API_KEY=your_key_here -e OPENAI_MODEL=gpt-5.4 tuterio
 ```
 
 ## Limits and Config

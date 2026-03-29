@@ -1,6 +1,6 @@
 # Launch Plan (CEO + Autoplan Style)
 
-This is the exact sequence to make LumiMath usable for real users.
+This is the exact sequence to make tuterio usable for real users.
 
 ## What I completed for you
 - Production app server hardening

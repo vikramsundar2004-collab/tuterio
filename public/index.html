@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LumiMath</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="ambient"></div>
+
+  <main class="layout">
+    <header class="hero">
+      <p class="eyebrow">Math Studio</p>
+      <h1>LumiMath Tutor</h1>
+      <p class="lede">Clean, modern math help with GPT-5.4. Type a problem, upload a photo, or do both.</p>
+      <p class="status" id="inputStatus">Enter text, attach a photo, or both.</p>
+    </header>
+
+    <section class="panel panel-main">
+      <div class="panel-head">
+        <h2>Solve a Problem</h2>
+        <span class="chip">Free MVP</span>
+      </div>
+
+      <label for="problem">Problem text (optional if photo provided)</label>
+      <textarea id="problem" placeholder="Example: Solve 2x^2 - 5x - 3 = 0"></textarea>
+
+      <div class="upload-wrap">
+        <label for="problemImage" class="upload-label">Upload or take a photo</label>
+        <input id="problemImage" type="file" accept="image/*" capture="environment" />
+        <button id="clearImage" class="btn btn-subtle" type="button">Remove photo</button>
+      </div>
+
+      <img id="imagePreview" class="preview hidden" alt="Uploaded problem preview" />
+
+      <div class="actions">
+        <button id="helpBtn" class="btn btn-primary" type="button">Help Mode</button>
+        <button id="solveBtn" class="btn btn-secondary" type="button">Solve Mode</button>
+      </div>
+
+      <pre id="tutorOutput" class="output">Tutor response appears here...</pre>
+    </section>
+
+    <section class="panel panel-side">
+      <h2>Progress</h2>
+      <div class="metrics">
+        <div><strong id="attempted">0</strong><span>Attempts</span></div>
+        <div><strong id="solved">0</strong><span>Solved</span></div>
+        <div><strong id="stuck">0</strong><span>Stuck</span></div>
+      </div>
+      <div class="actions side-actions">
+        <button id="markSolved" class="btn btn-subtle" type="button">Mark Solved</button>
+        <button id="markStuck" class="btn btn-subtle" type="button">Mark Stuck</button>
+        <button id="resetProgress" class="btn btn-danger" type="button">Reset</button>
+      </div>
+    </section>
+
+    <section class="panel panel-side">
+      <h2>Parent Updates</h2>
+      <p class="muted">Still free. Save parent contact for progress updates.</p>
+      <div class="field-grid">
+        <input id="studentName" type="text" placeholder="Student name" />
+        <input id="parentEmail" type="email" placeholder="Parent email" />
+      </div>
+      <button id="saveInterest" class="btn btn-primary" type="button">Save Contact</button>
+      <p id="interestStatus" class="muted"></p>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

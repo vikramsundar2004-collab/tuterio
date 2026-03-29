@@ -1,0 +1,15 @@
+{
+  "name": "lumimath",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LumiMath MVP server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "smoke": "node scripts/smoke_test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

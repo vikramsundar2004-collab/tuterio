@@ -189,7 +189,8 @@ async function askTutor(mode) {
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.error || "Unknown error");
+      const detail = data.detail ? ` (${data.detail})` : "";
+      throw new Error(`${data.error || "Unknown error"}${detail}`);
     }
 
     tutorOutputEl.textContent = data.message;

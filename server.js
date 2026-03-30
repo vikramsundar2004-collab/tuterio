@@ -11,9 +11,20 @@ const DATA_FILE = path.join(__dirname, "data", "interest-list.json");
 const TMP_DIR = path.join(__dirname, "data", "tmp");
 const UPSCALE_SCRIPT = path.join(__dirname, "scripts", "upscale_image.py");
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5.4";
-const FALLBACK_MODEL = process.env.OPENAI_FALLBACK_MODEL || "gpt-5-mini";
+function cleanEnv(value, fallback = "") {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+  if ((trimmed.startsWith("\"") && trimmed.endsWith("\"")) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
+const OPENAI_API_KEY = cleanEnv(process.env.OPENAI_API_KEY, "");
+const OPENAI_MODEL = cleanEnv(process.env.OPENAI_MODEL, "gpt-5.4");
+const FALLBACK_MODEL = cleanEnv(process.env.OPENAI_FALLBACK_MODEL, "gpt-5-mini");
+const SECONDARY_FALLBACK_MODEL = cleanEnv(process.env.OPENAI_SECONDARY_FALLBACK_MODEL, "gpt-4.1-mini");
 
 const TUTOR_RATE_LIMIT = Number(process.env.TUTOR_RATE_LIMIT || 35);
 const INTEREST_RATE_LIMIT = Number(process.env.INTEREST_RATE_LIMIT || 20);
@@ -195,6 +206,72 @@ function extensionFromMime(mime) {
   return ".jpg";
 }
 
+function normalizeMathInput(problem) {
+  return (problem || "")
+    .replace(/\s+/g, "")
+    .replace(/−/g, "-")
+    .replace(/²/g, "^2");
+}
+
+function parseQuadratic(problem) {
+  const normalized = normalizeMathInput(problem);
+  const match = normalized.match(/^([+\-]?\d*\.?\d*)x\^2([+\-]\d*\.?\d*)x([+\-]\d*\.?\d*)=0$/i);
+  if (!match) {
+    return null;
+  }
+
+  const toNumber = (value, fallback) => {
+    if (value === "+" || value === "") return fallback;
+    if (value === "-") return -fallback;
+    return Number(value);
+  };
+
+  const a = toNumber(match[1], 1);
+  const b = toNumber(match[2], 1);
+  const c = Number(match[3]);
+
+  if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c) || a === 0) {
+    return null;
+  }
+
+  const discriminant = b * b - 4 * a * c;
+  if (discriminant < 0) {
+    return { a, b, c, discriminant, roots: [] };
+  }
+
+  const sqrtD = Math.sqrt(discriminant);
+  const x1 = (-b + sqrtD) / (2 * a);
+  const x2 = (-b - sqrtD) / (2 * a);
+  return { a, b, c, discriminant, roots: [x1, x2] };
+}
+
+function localSolve(problem) {
+  const quadratic = parseQuadratic(problem);
+  if (!quadratic) {
+    return null;
+  }
+
+  const { a, b, c, discriminant, roots } = quadratic;
+  if (!roots.length) {
+    return [
+      "Local solver fallback (quadratic):",
+      `Equation: ${a}x^2 + ${b}x + ${c} = 0`,
+      `Discriminant: D = b^2 - 4ac = ${discriminant}`,
+      "D < 0, so there are no real-number solutions.",
+    ].join("\n");
+  }
+
+  const [x1, x2] = roots;
+  return [
+    "Local solver fallback (quadratic):",
+    `Equation: ${a}x^2 + ${b}x + ${c} = 0`,
+    `Discriminant: D = b^2 - 4ac = ${discriminant}`,
+    `x = (-b ± sqrt(D)) / (2a)`,
+    `x1 = ${x1}`,
+    `x2 = ${x2}`,
+  ].join("\n");
+}
+
 function fallbackTutor(problem, mode, hadImage) {
   const cleaned = (problem || "").trim();
 
@@ -212,6 +289,11 @@ function fallbackTutor(problem, mode, hadImage) {
       "5. If stuck, reduce to a smaller example and copy the pattern.",
       hadImage ? "6. Photo received. With OPENAI_API_KEY, GPT can also read the image directly." : "6. Add an image for handwritten problems when available.",
     ].join("\n");
+  }
+
+  const local = localSolve(cleaned);
+  if (local) {
+    return local;
   }
 
   return [
@@ -327,6 +409,47 @@ async function callOpenAI(model, problem, mode, imageDataUrl, originalImageDataU
   return message || "No model text returned.";
 }
 
+async function probeOpenAIModels() {
+  if (!OPENAI_API_KEY) {
+    return { ok: false, reason: "OPENAI_API_KEY missing", activeModel: null };
+  }
+
+  const tried = [];
+  const models = Array.from(new Set([OPENAI_MODEL, FALLBACK_MODEL, SECONDARY_FALLBACK_MODEL].filter(Boolean)));
+
+  for (const model of models) {
+    try {
+      const body = {
+        model,
+        input: [
+          { role: "system", content: [{ type: "input_text", text: "Return exactly: ok" }] },
+          { role: "user", content: [{ type: "input_text", text: "ok" }] },
+        ],
+      };
+      const response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        tried.push({ model, ok: false, reason: `${response.status} ${text}`.slice(0, 240) });
+        continue;
+      }
+
+      return { ok: true, activeModel: model, tried };
+    } catch (error) {
+      tried.push({ model, ok: false, reason: String(error.message || error).slice(0, 240) });
+    }
+  }
+
+  return { ok: false, reason: "All model probes failed", activeModel: null, tried };
+}
+
 async function openAITutor(problem, mode, imageDataUrl, originalImageDataUrl) {
   if (!OPENAI_API_KEY) {
     return {
@@ -336,24 +459,28 @@ async function openAITutor(problem, mode, imageDataUrl, originalImageDataUrl) {
     };
   }
 
-  try {
-    const message = await callOpenAI(OPENAI_MODEL, problem, mode, imageDataUrl, originalImageDataUrl);
-    return { message, model: OPENAI_MODEL, warning: null };
-  } catch (primaryError) {
-    if (OPENAI_MODEL !== FALLBACK_MODEL) {
-      try {
-        const message = await callOpenAI(FALLBACK_MODEL, problem, mode, imageDataUrl, originalImageDataUrl);
-        return {
-          message,
-          model: FALLBACK_MODEL,
-          warning: `Primary model ${OPENAI_MODEL} failed. Fallback used: ${String(primaryError.message || primaryError)}`,
-        };
-      } catch (secondaryError) {
-        throw new Error(`Model failure. Primary: ${String(primaryError.message || primaryError)} | Fallback: ${String(secondaryError.message || secondaryError)}`);
-      }
+  const models = Array.from(new Set([OPENAI_MODEL, FALLBACK_MODEL, SECONDARY_FALLBACK_MODEL].filter(Boolean)));
+  const failures = [];
+
+  for (const model of models) {
+    try {
+      const message = await callOpenAI(model, problem, mode, imageDataUrl, originalImageDataUrl);
+      return {
+        message,
+        model,
+        warning: failures.length ? `Recovered via ${model}. Earlier model failures: ${failures.join(" | ")}` : null,
+      };
+    } catch (error) {
+      failures.push(`${model}: ${String(error.message || error).slice(0, 200)}`);
     }
-    throw primaryError;
   }
+
+  const localMessage = fallbackTutor(problem, mode, Boolean(imageDataUrl));
+  return {
+    message: localMessage,
+    model: "fallback",
+    warning: `OpenAI unavailable. Tried models: ${failures.join(" | ")}`,
+  };
 }
 
 async function handleTutor(req, res) {
@@ -497,7 +624,16 @@ const server = http.createServer((req, res) => {
       model: OPENAI_MODEL,
       hasKey: Boolean(OPENAI_API_KEY),
       pythonUpscaleScript: fs.existsSync(UPSCALE_SCRIPT),
+      fallbackModel: FALLBACK_MODEL,
+      secondaryFallbackModel: SECONDARY_FALLBACK_MODEL,
     });
+    return;
+  }
+
+  if (req.method === "GET" && req.url === "/api/openai-status") {
+    probeOpenAIModels()
+      .then((status) => sendJson(res, 200, status))
+      .catch((error) => sendJson(res, 500, { ok: false, reason: String(error.message || error) }));
     return;
   }
 

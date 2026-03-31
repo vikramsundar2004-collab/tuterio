@@ -1,0 +1,37 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>tuterio settings</title>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="ambient"></div>
+
+  <main class="layout settings-layout">
+    <header class="hero">
+      <div class="hero-top">
+        <p class="eyebrow">Settings</p>
+        <a class="settings-link" href="/">Back to Tutor</a>
+      </div>
+      <h1>Appearance</h1>
+      <p class="lede">Choose how tuterio looks on your device.</p>
+    </header>
+
+    <section class="panel panel-main settings-card">
+      <h2>Theme</h2>
+      <p class="muted">Your choice is saved automatically.</p>
+      <div class="theme-options" id="themeOptions">
+        <button class="btn theme-btn" data-theme="light" type="button">Light</button>
+        <button class="btn theme-btn" data-theme="dark" type="button">Dark</button>
+        <button class="btn theme-btn" data-theme="system" type="button">System</button>
+      </div>
+      <p id="themeStatus" class="status"></p>
+    </section>
+  </main>
+
+  <script src="/settings.js"></script>
+</body>
+</html>

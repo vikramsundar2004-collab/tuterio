@@ -172,6 +172,17 @@ function parseJson(raw) {
   }
 }
 
+async function fetchWithTimeout(url, options, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const merged = { ...options, signal: controller.signal };
+    return await fetch(url, merged);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function parseDataUrl(dataUrl) {
   if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:")) {
     return null;
@@ -390,14 +401,14 @@ async function callOpenAI(model, problem, mode, imageDataUrl, originalImageDataU
     ],
   };
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetchWithTimeout("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${OPENAI_API_KEY}`,
     },
     body: JSON.stringify(body),
-  });
+  }, 15000);
 
   if (!response.ok) {
     const text = await response.text();
@@ -426,14 +437,14 @@ async function probeOpenAIModels() {
           { role: "user", content: [{ type: "input_text", text: "ok" }] },
         ],
       };
-      const response = await fetch("https://api.openai.com/v1/responses", {
+      const response = await fetchWithTimeout("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${OPENAI_API_KEY}`,
         },
         body: JSON.stringify(body),
-      });
+      }, 10000);
 
       if (!response.ok) {
         const text = await response.text();

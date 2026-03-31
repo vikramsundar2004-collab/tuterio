@@ -1,4 +1,4 @@
-const http = require("http");
+﻿const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
@@ -25,6 +25,7 @@ const OPENAI_API_KEY = cleanEnv(process.env.OPENAI_API_KEY, "");
 const OPENAI_MODEL = cleanEnv(process.env.OPENAI_MODEL, "gpt-5.4");
 const FALLBACK_MODEL = cleanEnv(process.env.OPENAI_FALLBACK_MODEL, "gpt-5-mini");
 const SECONDARY_FALLBACK_MODEL = cleanEnv(process.env.OPENAI_SECONDARY_FALLBACK_MODEL, "gpt-4.1-mini");
+const OPENAI_TIMEOUT_MS = Number(process.env.OPENAI_TIMEOUT_MS || 25000);
 
 const TUTOR_RATE_LIMIT = Number(process.env.TUTOR_RATE_LIMIT || 35);
 const INTEREST_RATE_LIMIT = Number(process.env.INTEREST_RATE_LIMIT || 20);
@@ -283,6 +284,70 @@ function localSolve(problem) {
   ].join("\n");
 }
 
+function parseQuadraticExpression(problem) {
+  const normalized = normalizeMathInput(problem);
+  const match = normalized.match(/^([+\-]?\d*\.?\d*)x\^2([+\-]\d*\.?\d*)x([+\-]\d*\.?\d*)$/i);
+  if (!match) {
+    return null;
+  }
+
+  const toNumber = (value, fallback) => {
+    if (value === "+" || value === "") return fallback;
+    if (value === "-") return -fallback;
+    return Number(value);
+  };
+
+  const a = toNumber(match[1], 1);
+  const b = toNumber(match[2], 1);
+  const c = Number(match[3]);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c) || a === 0) {
+    return null;
+  }
+  return { a, b, c };
+}
+
+function tryFactorQuadratic(problem) {
+  const q = parseQuadraticExpression(problem);
+  if (!q) {
+    return null;
+  }
+
+  const { a, b, c } = q;
+  const target = a * c;
+
+  for (let m = -Math.abs(target) - 1; m <= Math.abs(target) + 1; m += 1) {
+    if (m === 0 || target % m !== 0) continue;
+    const n = target / m;
+    if (m + n === b) {
+      return [
+        "Local factoring fallback:",
+        `Expression: ${a}x^2 + ${b}x + ${c}`,
+        `Multiply a*c = ${a}*${c} = ${target}`,
+        `Find numbers that multiply to ${target} and add to ${b}: ${m} and ${n}`,
+        `Split middle term: ${a}x^2 + ${m}x + ${n}x + ${c}`,
+        "Factor by grouping to get the binomial factors.",
+      ].join("\n");
+    }
+  }
+
+  return [
+    "Local factoring fallback:",
+    `Expression: ${a}x^2 + ${b}x + ${c}`,
+    "No clean integer factor pair found. Use quadratic formula or complete the square.",
+  ].join("\n");
+}
+
+function cleanTutorText(text) {
+  if (typeof text !== "string") return text;
+  return text
+    .replace(/\\\[/g, "")
+    .replace(/\\\]/g, "")
+    .replace(/\\cdot/g, "*")
+    .replace(/\\text\{([^}]*)\}/g, "$1")
+    .replace(/\\boxed\{([^}]*)\}/g, "$1")
+    .trim();
+}
+
 function fallbackTutor(problem, mode, hadImage) {
   const cleaned = (problem || "").trim();
 
@@ -305,6 +370,11 @@ function fallbackTutor(problem, mode, hadImage) {
   const local = localSolve(cleaned);
   if (local) {
     return local;
+  }
+
+  const factor = tryFactorQuadratic(cleaned);
+  if (factor) {
+    return factor;
   }
 
   return [
@@ -408,7 +478,7 @@ async function callOpenAI(model, problem, mode, imageDataUrl, originalImageDataU
       Authorization: `Bearer ${OPENAI_API_KEY}`,
     },
     body: JSON.stringify(body),
-  }, 15000);
+  }, OPENAI_TIMEOUT_MS);
 
   if (!response.ok) {
     const text = await response.text();
@@ -417,7 +487,7 @@ async function callOpenAI(model, problem, mode, imageDataUrl, originalImageDataU
 
   const data = await response.json();
   const message = extractOutputText(data);
-  return message || "No model text returned.";
+  return cleanTutorText(message || "No model text returned.");
 }
 
 async function probeOpenAIModels() {
@@ -671,3 +741,5 @@ server.listen(PORT, () => {
     pythonScriptFound: fs.existsSync(UPSCALE_SCRIPT),
   });
 });
+
+
